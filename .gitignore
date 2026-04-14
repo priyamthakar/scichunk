@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.env
+.venv/
+venv/
+scichunk_output/
+*.pdf
+*.docx
+.ruff_cache/
+.pytest_cache/

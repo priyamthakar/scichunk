@@ -1,0 +1,26 @@
+# SciChunk Configuration
+# ----------------------
+
+openrouter:
+  api_key: ${OPENROUTER_API_KEY}
+  model: "anthropic/claude-sonnet-4-20250514"
+  vision_model: "anthropic/claude-sonnet-4-20250514"
+
+chunking:
+  max_tokens: 4000
+  overlap_tokens: 200
+  respect_sections: true
+  respect_references: true
+  respect_figures: true
+
+research_mode: pharma  # pharma | bio | chem | general
+
+extraction:
+  detect_entities: true
+  extract_figures: true
+  extract_tables: true
+  ocr_scanned: false
+
+output:
+  format: json  # json | markdown
+  include_metadata: true
