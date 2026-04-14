@@ -46,7 +46,7 @@
 
 ```bash
 # Clone
-git clone https://github.com/YOUR_USERNAME/scichunk.git
+git clone https://github.com/priyamthakar/scichunk.git
 cd scichunk
 
 # Install
