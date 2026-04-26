@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="docs/logo.svg" alt="SciChunk" width="120"/>
-</p>
-
 <h1 align="center">SciChunk</h1>
 <p align="center"><strong>Scientific Document Preprocessing Pipeline for LLMs</strong></p>
 
@@ -9,38 +5,47 @@
   <a href="#features">Features</a> •
   <a href="#installation">Installation</a> •
   <a href="#quickstart">Quickstart</a> •
-  <a href="#how-it-works">How It Works</a> •
   <a href="#configuration">Configuration</a> •
-  <a href="#contributing">Contributing</a>
+  <a href="#roadmap">Roadmap</a>
 </p>
 
 ---
 
-> Upload any scientific document → get clean, structured, semantically chunked output ready for Claude, Gemini, or any LLM.
+> Convert scientific documents into clean, structured, LLM-ready chunks.
 
-**SciChunk** is purpose-built for scientific and pharmaceutical literature. Unlike generic document chunkers, it understands IMRaD structure (Introduction, Methods, Results, Discussion), preserves figure–caption links, respects citation boundaries, and extracts formulation parameters — so your LLM gets *research-aware* context, not blind token splits.
+**SciChunk** is an early-stage Python tool for preparing scientific and pharmaceutical documents for LLM workflows, RAG pipelines, and literature-review assistants. It focuses on section-aware chunking rather than blind token splitting, so outputs are easier to inspect, cite, and reuse.
 
 ## Why SciChunk?
 
 | Generic Chunkers | SciChunk |
 |---|---|
-| Split by token count | Split by **scientific sections** (IMRaD) |
-| Break mid-citation | **Reference-aware** boundaries |
-| Ignore figures/tables | **Figure & table extraction** with captions |
-| No domain knowledge | **Chemical entity & formulation** detection |
-| One-size-fits-all | **Research mode** for pharma/bio/chem papers |
+| Split only by size | Splits by scientific sections where possible |
+| Lose document context | Adds source file, section, token, word, and character metadata |
+| Hard to audit | Exports readable JSON, Markdown, or TXT |
+| No domain hints | Optional pharma/bio/chem research modes |
 
 ## Features
 
-- **Multi-format ingestion** — PDF, DOCX, TXT, Markdown, Jupyter notebooks (`.ipynb`)
-- **IMRaD section detection** — automatically identifies Introduction, Methods, Results, Discussion, Abstract, References
-- **Semantic chunking** — section-based, figure-aware, citation-respecting chunks
-- **Figure & table extraction** — extracts images, links captions, generates descriptions via LLM vision
-- **Formulation-aware parsing** — detects drug names, excipients, concentrations, ratios
-- **Reference preservation** — never splits mid-citation; groups references separately
-- **LLM-ready output** — JSON or Markdown with full metadata (token count, section, chunk ID)
-- **OpenRouter integration** — uses any model via OpenRouter API (vision + text)
-- **CLI + Python API** — use from terminal or import as a library
+### Implemented now
+
+- **Multi-format ingestion** — PDF, DOCX, TXT, Markdown (`.md`, `.markdown`)
+- **Scientific section detection** — Abstract, Introduction, Methods, Results, Discussion, Conclusion, References
+- **Chunk metadata** — chunk ID, source file, section, estimated tokens, word count, character count, word span, target model
+- **Citation mention extraction** — detects citation patterns such as `[12]`, `[12, 15]`, and `[12-15]`
+- **Basic research-mode entity extraction** — simple pharma/bio/chem keyword detection for drugs, polymers, and techniques
+- **CLI + Python API** — use from terminal or import as a Python library
+- **Config file support** — use `scichunk.yaml` or pass `--config`
+- **Output formats** — JSON, Markdown, and TXT
+
+### Planned, not fully implemented yet
+
+- Figure extraction and caption linking
+- Table extraction into structured formats
+- OCR for scanned PDFs
+- OpenRouter/vision-model integration
+- Jupyter notebook ingestion
+- OCSR / chemical structure recognition
+- Vector DB export and RAG integrations
 
 ## Installation
 
@@ -51,15 +56,16 @@ cd scichunk
 
 # Install
 pip install -e .
-
-# Set your OpenRouter API key
-export OPENROUTER_API_KEY="your-key-here"
 ```
 
 ### Requirements
 
 - Python 3.9+
-- Tesseract OCR (optional, for scanned PDFs): `sudo apt install tesseract-ocr`
+- PyMuPDF for PDF loading
+- python-docx for DOCX loading
+- PyYAML for config loading
+
+All core requirements are installed by `pip install -e .`.
 
 ## Quickstart
 
@@ -69,14 +75,20 @@ export OPENROUTER_API_KEY="your-key-here"
 # Process a single PDF
 scichunk process paper.pdf --output chunks/
 
-# Process entire folder
+# Process a DOCX file
+scichunk process manuscript.docx --output chunks/ --format markdown
+
+# Process an entire folder
 scichunk process ./papers/ --output chunks/ --format json
 
-# Research mode (pharma-aware extraction)
+# Pharma-aware extraction
 scichunk process paper.pdf --research-mode pharma --output chunks/
 
-# Specify target LLM for token-aware chunking
-scichunk process paper.pdf --model claude --max-tokens 4000
+# Target-model metadata and larger chunks
+scichunk process paper.pdf --model claude --max-tokens 4000 --overlap-tokens 200
+
+# Use a YAML config file
+scichunk process paper.pdf --config scichunk.yaml
 ```
 
 ### Python API
@@ -86,58 +98,58 @@ from scichunk import SciChunker
 
 chunker = SciChunker(
     research_mode="pharma",
-    max_chunk_tokens=4000,
+    max_chunk_tokens=1200,
+    overlap_tokens=120,
     target_model="claude"
 )
 
-# Process a file
 chunks = chunker.process("paper.pdf")
 
 for chunk in chunks:
-    print(f"[{chunk.section}] Chunk {chunk.id} ({chunk.token_count} tokens)")
+    print(f"[{chunk.section}] {chunk.id} ({chunk.token_count} approx. tokens)")
     print(chunk.text[:200])
-    print("---")
+    print(chunk.entities)
 ```
 
 ## How It Works
 
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────────┐     ┌──────────────┐
-│   LOADERS   │────▶│  PROCESSORS  │────▶│    CHUNKERS     │────▶│   OUTPUTS    │
-│             │     │              │     │                 │     │              │
-│ • PDF       │     │ • Section    │     │ • Section-based │     │ • JSON       │
-│ • DOCX      │     │   Detector   │     │ • Token-aware   │     │ • Markdown   │
-│ • TXT/MD    │     │ • Figure     │     │ • Reference-    │     │ • TXT        │
-│ • IPYNB     │     │   Extractor  │     │   preserving    │     │              │
-│             │     │ • Reference  │     │ • Figure-aware  │     │              │
-│             │     │   Parser     │     │                 │     │              │
-│             │     │ • Entity     │     │                 │     │              │
-│             │     │   Detector   │     │                 │     │              │
-└─────────────┘     └──────────────┘     └─────────────────┘     └──────────────┘
+```text
+Document input
+   ↓
+Text extraction from PDF, DOCX, TXT, or Markdown
+   ↓
+Section detection: Abstract, Introduction, Methods, Results, Discussion, etc.
+   ↓
+Chunking with overlap
+   ↓
+Metadata enrichment: citations, entity hints, word/token counts
+   ↓
+Export to JSON, Markdown, or TXT
 ```
 
 ## Output Format
 
-Each chunk includes rich metadata:
+Each chunk includes metadata like this:
 
 ```json
 {
   "id": "chunk_001",
   "source_file": "paper.pdf",
   "section": "Methods",
-  "subsection": "Nanoparticle Preparation",
   "text": "PCL nanoparticles were prepared by nanoprecipitation...",
   "token_count": 1247,
-  "page_numbers": [4, 5],
-  "figures": ["fig_3"],
-  "tables": ["table_2"],
+  "word_count": 959,
+  "char_count": 6420,
+  "start_word": 0,
+  "end_word": 959,
+  "chunk_type": "text",
+  "page_numbers": [],
   "references_cited": ["[12]", "[15]", "[23]"],
   "entities": {
     "drugs": ["quercetin"],
     "polymers": ["PCL", "chitosan"],
     "techniques": ["nanoprecipitation", "DLS"]
   },
-  "chunk_type": "text",
   "target_model": "claude"
 }
 ```
@@ -147,74 +159,40 @@ Each chunk includes rich metadata:
 Create a `scichunk.yaml` in your project root or pass `--config`:
 
 ```yaml
-# scichunk.yaml
-openrouter:
-  api_key: ${OPENROUTER_API_KEY}
-  model: "anthropic/claude-sonnet-4-20250514"
-  vision_model: "anthropic/claude-sonnet-4-20250514"
+research_mode: pharma
+model: claude
 
 chunking:
-  max_tokens: 4000
-  overlap_tokens: 200
-  respect_sections: true
-  respect_references: true
-  respect_figures: true
-
-research_mode: pharma  # Options: pharma, bio, chem, general
-
-extraction:
-  detect_entities: true
-  extract_figures: true
-  extract_tables: true
-  ocr_scanned: true
+  max_tokens: 1200
+  overlap_tokens: 120
 
 output:
   format: json  # json, markdown, txt
   include_metadata: true
 ```
 
+CLI arguments override config values.
+
 ## Research Modes
 
-| Mode | What it detects |
+| Mode | Current behavior |
 |---|---|
-| `pharma` | Drug names, excipients, formulation parameters, dosage forms, pharmacokinetic terms |
-| `bio` | Gene names, protein targets, organism names, assay types |
-| `chem` | Chemical compounds, IUPAC names, reaction types, solvents |
-| `general` | Basic scientific entity detection |
+| `pharma` | Basic keyword hints for selected drugs, polymers, and techniques |
+| `bio` | Uses the same early entity-detection framework; more biology terms planned |
+| `chem` | Uses the same early entity-detection framework; more chemistry terms planned |
+| `general` | No domain-entity extraction; only section/chunk metadata |
 
 ## Project Structure
 
-```
+```text
 scichunk/
 ├── scichunk/
 │   ├── __init__.py
-│   ├── core.py              # SciChunker main class
-│   ├── cli.py               # CLI interface
-│   ├── config.py            # Configuration management
-│   ├── loaders/
-│   │   ├── __init__.py
-│   │   ├── base.py          # Base loader interface
-│   │   ├── pdf_loader.py
-│   │   ├── docx_loader.py
-│   │   ├── text_loader.py
-│   │   └── ipynb_loader.py
-│   ├── processors/
-│   │   ├── __init__.py
-│   │   ├── section_detector.py
-│   │   ├── figure_extractor.py
-│   │   ├── reference_parser.py
-│   │   └── entity_detector.py
-│   ├── outputs/
-│   │   ├── __init__.py
-│   │   ├── json_output.py
-│   │   └── markdown_output.py
-│   └── utils/
-│       ├── __init__.py
-│       ├── tokenizer.py
-│       └── openrouter.py
+│   ├── core.py      # SciChunker and Chunk dataclass
+│   ├── cli.py       # Command-line interface
+│   └── config.py    # YAML config loader
 ├── tests/
-├── examples/
-├── docs/
+│   └── test_core.py
 ├── scichunk.yaml
 ├── setup.py
 ├── pyproject.toml
@@ -224,17 +202,18 @@ scichunk/
 
 ## Roadmap
 
-- [ ] Vector DB export (ChromaDB, Pinecone, Qdrant)
-- [ ] RAG pipeline integration
+- [ ] Better entity extraction with scientific NLP models
+- [ ] Table extraction
+- [ ] Figure extraction and caption linking
+- [ ] OCR for scanned PDFs
 - [ ] Streamlit web UI
-- [ ] BibTeX / RIS reference parsing
+- [ ] Vector DB export: ChromaDB, Qdrant, Pinecone
+- [ ] RAG pipeline integration
+- [ ] PubMed / arXiv ingestion
+- [ ] Jupyter notebook ingestion
 - [ ] Chemical structure image recognition (OCSR)
-- [ ] Batch processing with progress tracking
-- [ ] PubMed / arXiv direct ingestion
 
 ## Contributing
-
-Contributions welcome! See [CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 ```bash
 # Dev install
