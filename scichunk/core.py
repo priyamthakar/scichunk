@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 import re
-from typing import Iterable, Literal
+from typing import Literal
 
 ResearchMode = Literal["pharma", "bio", "chem", "general"]
 
@@ -17,10 +17,15 @@ class Chunk:
     section: str
     text: str
     token_count: int
+    word_count: int
+    char_count: int
+    start_word: int
+    end_word: int
     chunk_type: str = "text"
     page_numbers: list[int] = field(default_factory=list)
     references_cited: list[str] = field(default_factory=list)
     entities: dict[str, list[str]] = field(default_factory=dict)
+    target_model: str = "generic"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -29,9 +34,7 @@ class Chunk:
 class SciChunker:
     """Chunk scientific documents using section-aware and citation-aware rules.
 
-    This first implementation intentionally focuses on reliable text, Markdown,
-    and lightweight PDF extraction. It avoids pretending to perform deep figure
-    understanding unless that feature is explicitly added later.
+    Current supported inputs: PDF, DOCX, TXT, Markdown.
     """
 
     SECTION_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -45,10 +48,12 @@ class SciChunker:
     )
 
     ENTITY_PATTERNS: dict[str, tuple[str, ...]] = {
-        "drugs": (r"\bquercetin\b", r"\bdoxorubicin\b", r"\bpaclitaxel\b", r"\bcisplatin\b"),
-        "polymers": (r"\bPCL\b", r"\bPLGA\b", r"\bchitosan\b", r"\bPEG\b", r"\bEudragit\b"),
-        "techniques": (r"\bDLS\b", r"\bHPLC\b", r"\bTEM\b", r"\bSEM\b", r"\bnanoprecipitation\b"),
+        "drugs": (r"\bquercetin\b", r"\bdoxorubicin\b", r"\bpaclitaxel\b", r"\bcisplatin\b", r"\bcurcumin\b"),
+        "polymers": (r"\bPCL\b", r"\bPLGA\b", r"\bchitosan\b", r"\bPEG\b", r"\bEudragit\b", r"\bHPC\b"),
+        "techniques": (r"\bDLS\b", r"\bHPLC\b", r"\bTEM\b", r"\bSEM\b", r"\bDSC\b", r"\bnanoprecipitation\b"),
     }
+
+    SUPPORTED_SUFFIXES = {".pdf", ".docx", ".txt", ".md", ".markdown"}
 
     def __init__(
         self,
@@ -74,7 +79,7 @@ class SciChunker:
         if not path.exists():
             raise FileNotFoundError(f"Input file not found: {path}")
 
-        text = self._load_text(path)
+        text = self._normalize_text(self._load_text(path))
         sections = self._split_into_sections(text)
 
         chunks: list[Chunk] = []
@@ -88,7 +93,11 @@ class SciChunker:
             return path.read_text(encoding="utf-8", errors="replace")
         if suffix == ".pdf":
             return self._load_pdf(path)
-        raise ValueError(f"Unsupported file type: {suffix}. Supported: .txt, .md, .markdown, .pdf")
+        if suffix == ".docx":
+            return self._load_docx(path)
+        raise ValueError(
+            f"Unsupported file type: {suffix}. Supported: {', '.join(sorted(self.SUPPORTED_SUFFIXES))}"
+        )
 
     def _load_pdf(self, path: Path) -> str:
         try:
@@ -99,6 +108,32 @@ class SciChunker:
         document = fitz.open(path)
         pages = [page.get_text("text") for page in document]
         return "\n\n".join(pages)
+
+    def _load_docx(self, path: Path) -> str:
+        try:
+            from docx import Document
+        except ImportError as exc:
+            raise ImportError("DOCX support requires python-docx. Install with: pip install python-docx") from exc
+
+        document = Document(path)
+        parts: list[str] = []
+        for paragraph in document.paragraphs:
+            text = paragraph.text.strip()
+            if text:
+                parts.append(text)
+        for table in document.tables:
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                if cells:
+                    parts.append(" | ".join(cells))
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
 
     def _split_into_sections(self, text: str) -> list[tuple[str, str]]:
         hits: list[tuple[int, int, str]] = []
@@ -111,7 +146,7 @@ class SciChunker:
             return [("Document", text.strip())]
 
         sections: list[tuple[str, str]] = []
-        for index, (start, end, section_name) in enumerate(hits):
+        for index, (_start, end, section_name) in enumerate(hits):
             next_start = hits[index + 1][0] if index + 1 < len(hits) else len(text)
             body = text[end:next_start].strip()
             if body:
@@ -138,8 +173,13 @@ class SciChunker:
                         section=section,
                         text=chunk_text,
                         token_count=self._estimate_tokens(chunk_text),
+                        word_count=len(chunk_words),
+                        char_count=len(chunk_text),
+                        start_word=start,
+                        end_word=end,
                         references_cited=self._extract_reference_mentions(chunk_text),
                         entities=self._extract_entities(chunk_text),
+                        target_model=self.target_model,
                     )
                 )
                 chunk_index += 1
