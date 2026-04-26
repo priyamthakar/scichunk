@@ -6,7 +6,7 @@ ROOT = Path(__file__).parent
 
 setup(
     name="scichunk",
-    version="0.1.0",
+    version="0.2.0",
     description="Scientific document preprocessing and chunking pipeline for LLM workflows",
     long_description=(ROOT / "README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
@@ -16,11 +16,12 @@ setup(
     python_requires=">=3.9",
     install_requires=[
         "pymupdf>=1.23.0",
+        "python-docx>=1.0.0",
+        "pyyaml>=6.0",
         "click>=8.1.0",
         "rich>=13.0.0",
     ],
     extras_require={
-        "docs": ["python-docx>=1.0.0", "nbformat>=5.9.0"],
         "ocr": ["pytesseract>=0.3.10", "Pillow>=10.0.0"],
         "dev": ["pytest>=7.0", "ruff>=0.1.0"],
     },
