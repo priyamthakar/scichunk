@@ -196,7 +196,7 @@ class SciChunker:
 
     @staticmethod
     def _extract_reference_mentions(text: str) -> list[str]:
-        refs = re.findall(r"\[(?:\d{1,3})(?:\s*[-,]\s*\d{1,3})*\]", text)
+        refs = re.findall(r"\[\d{1,3}(?:\s*[-,]\s*\d{1,3})*\]", text)
         return sorted(set(refs))
 
     def _extract_entities(self, text: str) -> dict[str, list[str]]:
