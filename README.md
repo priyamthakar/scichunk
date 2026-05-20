@@ -28,7 +28,7 @@
 
 ### Implemented now
 
-- **Multi-format ingestion** — PDF, DOCX, TXT, Markdown (`.md`, `.markdown`)
+- **Multi-format ingestion** — PDF, DOCX, TXT, Markdown — `.md` and `.markdown`
 - **Scientific section detection** — Abstract, Introduction, Methods, Results, Discussion, Conclusion, References
 - **Chunk metadata** — chunk ID, source file, section, estimated tokens, word count, character count, word span, target model
 - **Citation mention extraction** — detects citation patterns such as `[12]`, `[12, 15]`, and `[12-15]`
@@ -106,7 +106,7 @@ chunker = SciChunker(
 chunks = chunker.process("paper.pdf")
 
 for chunk in chunks:
-    print(f"[{chunk.section}] {chunk.id} ({chunk.token_count} approx. tokens)")
+    print(f"[{chunk.section}] {chunk.id} | {chunk.token_count} approx. tokens")
     print(chunk.text[:200])
     print(chunk.entities)
 ```
@@ -211,7 +211,7 @@ scichunk/
 - [ ] RAG pipeline integration
 - [ ] PubMed / arXiv ingestion
 - [ ] Jupyter notebook ingestion
-- [ ] Chemical structure image recognition (OCSR)
+- [ ] OCSR — chemical structure image recognition
 
 ## Contributing
 
